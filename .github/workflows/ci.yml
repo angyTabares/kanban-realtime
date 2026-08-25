@@ -35,7 +35,7 @@ jobs:
       - run: npm run typecheck --workspaces --if-present
       - run: npm run build
       - run: npm run test --workspaces --if-present
-      - run: npm run test:e2e -w @kanban/api
+      - run: npm run test:e2e -w @kanban/api -- --forceExit
         env:
           DB_HOST: localhost
           DB_PORT: 5432
