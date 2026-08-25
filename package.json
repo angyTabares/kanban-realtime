@@ -1,0 +1,22 @@
+{
+  "name": "kanban-realtime",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SaaS de gestión de proyectos Kanban con colaboración en tiempo real. Monorepo: NestJS API + React web + paquete compartido.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build -w @kanban/shared && npm run build -w @kanban/api && npm run build -w @kanban/web",
+    "dev": "npm run dev -w @kanban/api",
+    "dev:web": "npm run dev -w @kanban/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "npm run test:e2e -w @kanban/api"
+  }
+}

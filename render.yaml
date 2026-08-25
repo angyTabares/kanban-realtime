@@ -1,0 +1,47 @@
+services:
+  - type: web
+    name: kanban-api
+    env: docker
+    plan: free
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DB_HOST
+        sync: false # aws-0-us-west-2.pooler.supabase.com
+      - key: DB_PORT
+        sync: false # 5432
+      - key: DB_USER
+        sync: false # postgres.kliegmglvxlowsjnqprx
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        value: postgres
+      - key: DB_SYNCHRONIZE
+        value: "true"
+      - key: REDIS_HOST
+        sync: false
+      - key: REDIS_PORT
+        sync: false
+      - key: REDIS_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false
+      - key: WEB_URL
+        sync: false
+
+  - type: web
+    name: kanban-web
+    env: docker
+    plan: free
+    dockerfilePath: ./apps/web/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: VITE_API_URL
+        sync: false # https://kanban-api-xxxx.onrender.com (ponlo tras el 1er deploy)

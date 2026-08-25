@@ -1,0 +1,47 @@
+name: ci
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kanban
+          POSTGRES_PASSWORD: kanban
+          POSTGRES_DB: kanban_dev
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U kanban -d kanban_dev"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck --workspaces --if-present
+      - run: npm run build
+      - run: npm run test --workspaces --if-present
+      - run: npm run test:e2e -w @kanban/api
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: kanban
+          DB_PASSWORD: kanban
+          DB_NAME: kanban_dev
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          JWT_SECRET: ci-secret
+          DB_SYNCHRONIZE: "true"
