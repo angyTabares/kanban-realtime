@@ -29,12 +29,10 @@ import { REDIS } from './tokens';
           username: password ? config.get<string>('redis.username') : undefined,
           password,
           tls: config.get<any>('redis.tls'),
-          // Upstash con clave errónea no debe tumbar la API
           lazyConnect: isUpstash,
           maxRetriesPerRequest: null,
           enableReadyCheck: false,
           retryStrategy: isUpstash ? () => null : undefined,
-          enableOfflineQueue: !isUpstash,
         });
         redis.on('error', (err) => {
           // eslint-disable-next-line no-console

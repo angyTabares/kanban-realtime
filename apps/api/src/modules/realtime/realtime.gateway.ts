@@ -41,8 +41,7 @@ export class RealtimeGateway
   ) {}
 
   afterInit() {
-    // Si Redis es Upstash y no conectó, no usar adapter (evita WRONGPASS)
-    if ((this.redis as unknown as { status?: string }).status === 'end' || this.redis.status === 'close') {
+    if (this.redis.status !== 'ready') {
       this.logger.warn('Redis no disponible, realtime en memoria (sin adapter)');
       return;
     }
