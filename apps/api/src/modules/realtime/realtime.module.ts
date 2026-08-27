@@ -26,16 +26,18 @@ import { REDIS } from './tokens';
           username: config.get<string>('redis.username'),
           password: config.get<string>('redis.password'),
           tls: config.get<any>('redis.tls'),
-          lazyConnect: false,
+          lazyConnect: true,
           maxRetriesPerRequest: null,
           enableReadyCheck: false,
           retryStrategy: () => null,
+          enableOfflineQueue: false,
         });
         redis.on('error', (err) => {
-          // No tumba la API; el realtime queda en memoria para 1 instancia
           // eslint-disable-next-line no-console
           console.warn('[Redis] no disponible, modo memoria:', err.message);
         });
+        // Intento de conexión no bloqueante
+        redis.connect().catch(() => {});
         return redis;
       },
     },
