@@ -20,24 +20,20 @@ import { REDIS } from './tokens';
       provide: REDIS,
       inject: [ConfigService],
       useFactory: (config: ConfigService): Redis => {
+        const password = config.get<string>('redis.password');
         const redis = new Redis({
           host: config.get<string>('redis.host'),
           port: config.get<number>('redis.port'),
-          username: config.get<string>('redis.username'),
-          password: config.get<string>('redis.password'),
+          username: password ? config.get<string>('redis.username') : undefined,
+          password,
           tls: config.get<any>('redis.tls'),
-          lazyConnect: true,
           maxRetriesPerRequest: null,
           enableReadyCheck: false,
-          retryStrategy: () => null,
-          enableOfflineQueue: false,
         });
         redis.on('error', (err) => {
           // eslint-disable-next-line no-console
           console.warn('[Redis] no disponible, modo memoria:', err.message);
         });
-        // Intento de conexión no bloqueante
-        redis.connect().catch(() => {});
         return redis;
       },
     },
