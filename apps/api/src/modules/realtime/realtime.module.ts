@@ -23,10 +23,12 @@ import { REDIS } from './tokens';
         new Redis({
           host: config.get<string>('redis.host'),
           port: config.get<number>('redis.port'),
+          username: config.get<string>('redis.username'),
           password: config.get<string>('redis.password'),
           tls: config.get<any>('redis.tls'),
           lazyConnect: false,
           maxRetriesPerRequest: null,
+          enableReadyCheck: true,
         }),
     },
     RealtimeGateway,
