@@ -19,8 +19,8 @@ import { REDIS } from './tokens';
     {
       provide: REDIS,
       inject: [ConfigService],
-      useFactory: (config: ConfigService): Redis =>
-        new Redis({
+      useFactory: (config: ConfigService): Redis => {
+        const redis = new Redis({
           host: config.get<string>('redis.host'),
           port: config.get<number>('redis.port'),
           username: config.get<string>('redis.username'),
@@ -28,8 +28,16 @@ import { REDIS } from './tokens';
           tls: config.get<any>('redis.tls'),
           lazyConnect: false,
           maxRetriesPerRequest: null,
-          enableReadyCheck: true,
-        }),
+          enableReadyCheck: false,
+          retryStrategy: () => null,
+        });
+        redis.on('error', (err) => {
+          // No tumba la API; el realtime queda en memoria para 1 instancia
+          // eslint-disable-next-line no-console
+          console.warn('[Redis] no disponible, modo memoria:', err.message);
+        });
+        return redis;
+      },
     },
     RealtimeGateway,
   ],

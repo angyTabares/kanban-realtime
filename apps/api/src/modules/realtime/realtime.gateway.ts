@@ -41,12 +41,16 @@ export class RealtimeGateway
   ) {}
 
   afterInit() {
-    // Redis adapter: permite escalar horizontalmente a instancias múltiples
-    // distribuyendo los eventos entre todos los nodos de socket.io.
-    const pubClient = this.redis.duplicate();
-    const subClient = this.redis.duplicate();
-    this.server.adapter(createAdapter(pubClient, subClient));
-    this.logger.log('WebSocket gateway inicializado en /ws (Redis adapter activo)');
+    try {
+      const pubClient = this.redis.duplicate();
+      const subClient = this.redis.duplicate();
+      pubClient.on('error', () => {});
+      subClient.on('error', () => {});
+      this.server.adapter(createAdapter(pubClient, subClient));
+      this.logger.log('WebSocket gateway inicializado en /ws (Redis adapter activo)');
+    } catch {
+      this.logger.warn('Redis no disponible, realtime en memoria (sin adapter)');
+    }
   }
 
   async handleConnection(socket: Socket) {
