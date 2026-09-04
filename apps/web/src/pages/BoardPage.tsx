@@ -20,7 +20,12 @@ export function BoardPage() {
   const [myRole, setMyRole] = useState<null | string>(null);
 
   useEffect(() => {
-    if (board) setBoardState(board);
+    if (board) {
+      setBoardState(board);
+      document.title = `${board.name} | Kanban Live`;
+    } else {
+      document.title = 'Tablero | Kanban Live';
+    }
   }, [board, setBoardState]);
 
   useEffect(() => {

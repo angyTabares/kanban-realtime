@@ -69,6 +69,7 @@ export function DashboardPage() {
   };
 
   useEffect(() => {
+    document.title = 'Tableros | Kanban Live';
     load().catch((e) => setError(e instanceof ApiError ? e.message : 'Error'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

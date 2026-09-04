@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../store/auth';
 import { ApiError } from '../lib/api';
@@ -11,6 +11,9 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    document.title = 'Inicia sesión | Kanban Live';
+  }, []);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

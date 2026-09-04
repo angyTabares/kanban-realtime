@@ -25,8 +25,8 @@ export function Layout() {
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
       <header className="app-header">
-        <Link to="/" style={{ fontWeight: 700, fontSize: 18, display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span style={{ color: 'var(--primary)' }}>⬡</span> Kanban Live
+        <Link to="/" style={{ fontWeight: 800, fontSize: 17, display: 'flex', gap: 10, alignItems: 'center', letterSpacing: -0.3 }}>
+          <span style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 14, boxShadow: '0 2px 8px rgba(79,70,229,0.3)' }}>⬡</span> Kanban Live
         </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
