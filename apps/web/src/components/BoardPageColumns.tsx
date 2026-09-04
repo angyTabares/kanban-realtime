@@ -15,22 +15,32 @@ import { BoardFull, TaskDto } from '../lib/types';
 import { api } from '../lib/api';
 import { ColumnView, TaskCard } from './ColumnView';
 import { useAuth } from '../store/auth';
+import { toUserMessage, useToast } from '../store/toast';
 
 export function BoardPageColumns({
   board,
   canEdit,
+  addTask,
+  removeTask,
   optimisticMove,
   optimisticReorder,
 }: {
   board: BoardFull;
   canEdit: boolean;
+  addTask: (task: TaskDto) => void;
+  removeTask: (taskId: string) => void;
   optimisticMove: (taskId: string, targetColumnId: string, position: number) => void;
   optimisticReorder: (columnId: string, orderedTaskIds: string[]) => void;
 }) {
   const me = useAuth((s) => s.user!);
+  const toast = useToast((s) => s.push);
   const [activeColumn, setActiveColumn] = useState<string | null>(null);
   const [overColumn, setOverColumn] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<TaskDto | null>(null);
+  const [confirmColumn, setConfirmColumn] = useState<null | { id: string; title: string }>(null);
+  const [deletingColumn, setDeletingColumn] = useState(false);
+  const [confirmTask, setConfirmTask] = useState<TaskDto | null>(null);
+  const [deletingTask, setDeletingTask] = useState(false);
 
   const tasksById = useMemo(() => {
     const map: Record<string, TaskDto> = {};
@@ -98,7 +108,7 @@ export function BoardPageColumns({
           .put(`/boards/${board.id}/columns/${fromColumnId}/tasks/reorder`, {
             orderedTaskIds: ids,
           })
-          .catch(() => {});
+          .catch((e) => toast(toUserMessage(e, 'No se pudo reordenar'), 'error'));
       }
       return;
     }
@@ -117,49 +127,77 @@ export function BoardPageColumns({
         targetColumnId: toColumnId,
         position,
       })
-      .catch(() => {});
+      .catch((e) => toast(toUserMessage(e, 'No se pudo mover la tarjeta'), 'error'));
   };
 
   const onAddColumn = async (title: string) => {
     try {
       await api.post(`/boards/${board.id}/columns`, { title });
-    } catch {
-      /* el evento de socket hace converger */
+      toast('Columna creada', 'success');
+    } catch (e) {
+      toast(toUserMessage(e, 'No se pudo crear la columna'), 'error');
     }
   };
 
   const onDeleteColumn = async (columnId: string) => {
-    if (!confirm('¿Eliminar columna y todas sus tareas?')) return;
+    setDeletingColumn(true);
     try {
       await api.delete(`/boards/${board.id}/columns/${columnId}`);
-    } catch {
-      /* convergerá */
+      toast('Columna eliminada', 'success');
+      setConfirmColumn(null);
+    } catch (e) {
+      toast(toUserMessage(e, 'No se pudo eliminar la columna'), 'error');
+    } finally {
+      setDeletingColumn(false);
     }
   };
 
   const onRenameColumn = async (columnId: string, title: string) => {
     try {
       await api.patch(`/boards/${board.id}/columns/${columnId}`, { title });
-    } catch {
-      /* convergerá */
+    } catch (e) {
+      toast(toUserMessage(e, 'No se pudo renombrar'), 'error');
     }
   };
 
-  const onAddTask = async (columnId: string, title: string) => {
+  const onAddTask = async (
+    columnId: string,
+    draft: { title: string; description?: string; labels?: string[]; dueDate?: string | null; assigneeId?: string | null },
+  ) => {
     try {
-      await api.post(`/boards/${board.id}/columns/${columnId}/tasks`, {
-        title,
-        assigneeId: me.id,
+      const created = await api.post<TaskDto>(`/boards/${board.id}/columns/${columnId}/tasks`, {
+        title: draft.title,
+        description: draft.description ?? null,
+        labels: draft.labels ?? [],
+        dueDate: draft.dueDate ?? null,
+        assigneeId: draft.assigneeId ?? me.id,
       });
-      // El evento TASK_CREATED publica el board completo actualizado
-    } catch {
-      /* convergerá */
+      // aparece inmediato sin esperar socket
+      addTask(created);
+      toast('Tarea creada', 'success');
+    } catch (e) {
+      toast(toUserMessage(e, 'No se pudo crear la tarea'), 'error');
+      throw e;
     }
   };
 
   const deleteTask = (task: TaskDto) => {
-    if (!confirm(`¿Eliminar "${task.title}"?`)) return;
-    void api.delete(`/boards/${board.id}/tasks/${task.id}`).catch(() => {});
+    setConfirmTask(task);
+  };
+  const confirmDeleteTask = async () => {
+    if (!confirmTask) return;
+    setDeletingTask(true);
+    const id = confirmTask.id;
+    removeTask(id);
+    setConfirmTask(null);
+    try {
+      await api.delete(`/boards/${board.id}/tasks/${id}`);
+      toast('Tarea eliminada', 'success');
+    } catch (e) {
+      toast(toUserMessage(e, 'No se pudo eliminar'), 'error');
+    } finally {
+      setDeletingTask(false);
+    }
   };
 
   return (
@@ -184,10 +222,15 @@ export function BoardPageColumns({
               canEdit={canEdit}
               overColumn={overColumn}
               onAddTask={onAddTask}
-              onDeleteColumn={onDeleteColumn}
+              onDeleteColumn={async (id) => {
+                const c = board.columns.find((x) => x.id === id);
+                setConfirmColumn(c ? { id, title: c.title } : { id, title: 'esta columna' });
+              }}
               onRenameColumn={onRenameColumn}
               onDeleteTask={deleteTask}
               isActiveColumn={activeColumn === column.id}
+              members={board.members}
+              removeTask={removeTask}
             />
           ))}
           {canEdit && (
@@ -198,6 +241,36 @@ export function BoardPageColumns({
           {activeTask ? <TaskCard task={activeTask} /> : null}
         </DragOverlay>
       </DndContext>
+
+      {confirmColumn && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 100 }} onClick={() => !deletingColumn && setConfirmColumn(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 24, width: 400, maxWidth: '100%', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 22 }}>🗂</div>
+            <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700 }}>¿Eliminar columna?</h3>
+            <p style={{ margin: '0 0 4px', color: 'var(--text)', fontWeight: 600 }}>{confirmColumn.title}</p>
+            <p style={{ margin: '0 0 18px', color: 'var(--muted)', fontSize: 13 }}>Se borrarán todas sus tareas. No se puede deshacer.</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button onClick={() => setConfirmColumn(null)} disabled={deletingColumn} style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', padding: '9px 14px', borderRadius: 8, fontSize: 14, flex: 1, opacity: deletingColumn ? 0.6 : 1 }}>Cancelar</button>
+              <button onClick={() => onDeleteColumn(confirmColumn.id)} disabled={deletingColumn} style={{ background: '#dc2626', color: '#fff', border: 'none', padding: '9px 14px', borderRadius: 8, fontSize: 14, fontWeight: 600, flex: 1, opacity: deletingColumn ? 0.6 : 1, cursor: deletingColumn ? 'not-allowed' : 'pointer' }}>{deletingColumn ? 'Eliminando…' : 'Eliminar'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmTask && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 100 }} onClick={() => !deletingTask && setConfirmTask(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 24, width: 400, maxWidth: '100%', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 22 }}>🗑</div>
+            <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700 }}>¿Eliminar tarea?</h3>
+            <p style={{ margin: '0 0 4px', color: 'var(--text)', fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{confirmTask.title}</p>
+            <p style={{ margin: '0 0 18px', color: 'var(--muted)', fontSize: 13 }}>Se eliminará para todos los miembros.</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button onClick={() => setConfirmTask(null)} disabled={deletingTask} style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', padding: '9px 14px', borderRadius: 8, fontSize: 14, flex: 1, opacity: deletingTask ? 0.6 : 1 }}>Cancelar</button>
+              <button onClick={confirmDeleteTask} disabled={deletingTask} style={{ background: '#dc2626', color: '#fff', border: 'none', padding: '9px 14px', borderRadius: 8, fontSize: 14, fontWeight: 600, flex: 1, opacity: deletingTask ? 0.6 : 1, cursor: deletingTask ? 'not-allowed' : 'pointer' }}>{deletingTask ? 'Eliminando…' : 'Eliminar'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -213,31 +286,39 @@ function reorderTaskIds(tasks: TaskDto[], activeId: string, overId: string): str
   return ids;
 }
 
-function AddColumnButton({ onAdd }: { onAdd: (title: string) => void }) {
+function AddColumnButton({ onAdd }: { onAdd: (title: string) => Promise<void> }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
+  const [loading, setLoading] = useState(false);
   return open ? (
     <form
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
-        if (title.trim()) onAdd(title.trim());
-        setTitle('');
-        setOpen(false);
+        if (!title.trim() || loading) return;
+        setLoading(true);
+        try {
+          await onAdd(title.trim());
+          setTitle('');
+          setOpen(false);
+        } finally {
+          setLoading(false);
+        }
       }}
       style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 12, width: 260 }}
     >
       <input
         autoFocus
+        disabled={loading}
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Nombre de la columna"
-        style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 8 }}
+        style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 8, opacity: loading ? 0.6 : 1 }}
       />
       <div style={{ display: 'flex', gap: 8 }}>
-        <button type="submit" style={{ background: 'var(--primary)', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 8, fontSize: 13, flex: 1 }}>
-          Añadir
+        <button type="submit" disabled={loading} style={{ background: 'var(--primary)', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 8, fontSize: 13, flex: 1, opacity: loading ? 0.6 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}>
+          {loading ? 'Añadiendo…' : 'Añadir'}
         </button>
-        <button type="button" onClick={() => setOpen(false)} style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', padding: '6px 12px', borderRadius: 8, fontSize: 13 }}>
+        <button type="button" disabled={loading} onClick={() => setOpen(false)} style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', padding: '6px 12px', borderRadius: 8, fontSize: 13, opacity: loading ? 0.6 : 1 }}>
           ✕
         </button>
       </div>

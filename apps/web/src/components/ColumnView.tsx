@@ -264,7 +264,7 @@ function SortableTaskCard({
       }}
       onDoubleClick={(e) => {
         e.stopPropagation();
-        if (confirm(`¿Eliminar "${task.title}"?`)) onDelete(task);
+        onDelete(task);
       }}
     >
       <TaskCard task={task} />

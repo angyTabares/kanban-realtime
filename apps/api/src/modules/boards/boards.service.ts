@@ -172,7 +172,7 @@ export class BoardsService {
       throw new BadRequestException('El usuario ya es miembro del board');
     }
 
-    await this.memberRepo.save(
+    const saved = await this.memberRepo.save(
       this.memberRepo.create({
         boardId,
         userId: user.id,
@@ -180,11 +180,14 @@ export class BoardsService {
       }),
     );
 
-    this.realtime.emitToBoard(boardId, BoardEvent.MEMBER_ADDED, {
-      boardId,
-      userId: user.id,
-      role: dto.role ?? BoardMemberRole.MEMBER,
+    const fullMember = await this.memberRepo.findOne({
+      where: { id: saved.id },
+      relations: { user: true },
     });
+
+    if (fullMember) {
+      this.realtime.emitToBoard(boardId, BoardEvent.MEMBER_ADDED, fullMember);
+    }
 
     return this.findOneForUser(boardId, actorId);
   }

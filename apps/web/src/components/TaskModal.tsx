@@ -3,6 +3,8 @@ import { api } from '../lib/api';
 import { CommentDto, TaskDto } from '../lib/types';
 import { Avatar } from './Avatar';
 import { useBoardState } from '../store/board';
+import { toUserMessage, useToast } from '../store/toast';
+import { ModernAssigneeSelect, ModernDatePicker } from './ModernPickers';
 
 const LABELS = [
   'red', 'orange', 'amber', 'green', 'emerald',
@@ -13,12 +15,15 @@ export function TaskModal({
   task: initial,
   boardId,
   onClose,
+  onDeleted,
 }: {
   task: TaskDto;
   boardId: string;
   onClose: () => void;
+  onDeleted?: (taskId: string) => void;
 }) {
   const board = useBoardState((s) => s.current);
+  const toast = useToast((s) => s.push);
   const [task, setTask] = useState<TaskDto>(initial);
   const [title, setTitle] = useState(initial.title);
   const [description, setDescription] = useState(initial.description ?? '');
@@ -28,6 +33,9 @@ export function TaskModal({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [comment, setComment] = useState('');
+  const [commentSending, setCommentSending] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     setTask(initial);
@@ -41,10 +49,14 @@ export function TaskModal({
   }, [initial]);
 
   const persist = async () => {
+    if (!title.trim()) {
+      toast('El título es obligatorio', 'error');
+      return;
+    }
     setSaving(true);
     try {
       const updated = await api.patch<{ id: string }>(`/boards/${boardId}/tasks/${task.id}`, {
-        title,
+        title: title.trim(),
         description,
         dueDate: dueDate || null,
         labels,
@@ -53,9 +65,10 @@ export function TaskModal({
       const next = { ...task, ...updated };
       setTask(next);
       setSaved(true);
+      toast('Cambios guardados', 'success');
       setTimeout(() => setSaved(false), 2000);
-    } catch {
-      /* convergerá */
+    } catch (e) {
+      toast(toUserMessage(e, 'No se pudo guardar'), 'error');
     } finally {
       setSaving(false);
     }
@@ -69,19 +82,40 @@ export function TaskModal({
 
   const addComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!comment.trim()) return;
+    if (!comment.trim() || commentSending) return;
+    setCommentSending(true);
     try {
       const created = await api.post<CommentDto>(`/boards/${boardId}/tasks/${task.id}/comments`, { body: comment.trim() });
       setTask((prev) => ({ ...prev, comments: [...(prev.comments ?? []), created] }));
       setComment('');
-    } catch {
-      /* convergerá */
+      toast('Comentario añadido', 'success');
+    } catch (e) {
+      toast(toUserMessage(e, 'No se pudo añadir el comentario'), 'error');
+    } finally {
+      setCommentSending(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    // optimista: quita de la columna inmediato
+    onDeleted?.(task.id);
+    try {
+      await api.delete(`/boards/${boardId}/tasks/${task.id}`);
+      toast('Tarea eliminada', 'success');
+      onClose();
+    } catch (e) {
+      toast(toUserMessage(e, 'No se pudo eliminar'), 'error');
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
     }
   };
 
   return (
-    <div className="task-modal-overlay" onClick={onClose}>
-      <div className="task-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="task-modal-overlay" onClick={onClose} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 16, overflowY: 'auto', maxHeight: '100dvh' }}>
+      <div className="task-modal" onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: 560, maxWidth: 'calc(100% - 16px)', maxHeight: 'min(92vh, calc(100dvh - 32px))', display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0, margin: 'auto' }}>
+        <div style={{ padding: '20px 24px 0', flexShrink: 0, overflowY: 'auto', maxHeight: 'min(55vh, 420px)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {LABELS.map((l) => (
@@ -121,48 +155,42 @@ export function TaskModal({
           />
         </label>
 
-        <div className="task-modal-row">
-          <label style={fieldLabel}>
-            Fecha límite
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              style={field}
-            />
-          </label>
-          <label style={fieldLabel}>
-            Asignada a
-            <select
-              value={assigneeId}
-              onChange={(e) => setAssigneeId(e.target.value)}
-              style={field}
-            >
-              <option value="">Sin asignar</option>
-              {(board?.members ?? []).map((m) => (
-                <option key={m.userId} value={m.userId}>{m.user.name}</option>
-              ))}
-            </select>
-          </label>
+        <div style={{ display: 'flex', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 160, background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 12, padding: '12px 14px' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>🗓 Fecha límite</div>
+            <ModernDatePicker value={dueDate} onChange={setDueDate} />
+          </div>
+          <div style={{ flex: 1, minWidth: 160, background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 12, padding: '12px 14px' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>👤 Asignada a</div>
+            <ModernAssigneeSelect value={assigneeId} onChange={setAssigneeId} members={(board?.members ?? []) as never} />
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-          <button onClick={() => void persist()} disabled={saving} style={primaryBtn}>
+        <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button onClick={() => setConfirmDelete(true)} disabled={deleting} style={{ background: '#fff', border: '1px solid #fecaca', color: '#dc2626', padding: '9px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, opacity: deleting ? 0.6 : 1, cursor: deleting ? 'not-allowed' : 'pointer' }}>
+            🗑 Eliminar
+          </button>
+          <div style={{ flex: 1 }} />
+          {saved && <span style={{ color: '#16a34a', fontSize: 13, alignSelf: 'center' }}>✓ Guardado</span>}
+          <button onClick={onClose} disabled={saving || commentSending} style={{ ...ghostBtn2, opacity: saving || commentSending ? 0.6 : 1, cursor: saving || commentSending ? 'not-allowed' : 'pointer' }}>Cancelar</button>
+          <button onClick={() => void persist()} disabled={saving} style={{ ...primaryBtn, opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}>
             {saving ? 'Guardando…' : 'Guardar'}
           </button>
-          <button onClick={onClose} style={ghostBtn2}>Cancelar</button>
-          {saved && <span style={{ color: '#16a34a', fontSize: 13, alignSelf: 'center' }}>✓ Guardado</span>}
         </div>
-
-        <h4 style={{ margin: '20px 0 10px', fontSize: 14 }}>Comentarios</h4>
+        </div>
+        <div className="task-comments" style={{ flex: 1, padding: '0 24px 20px', borderTop: '1px solid #f3f4f6', marginTop: 16, overflowY: 'auto', minHeight: 120, maxHeight: '38vh' }}>
+        <h4 style={{ margin: '16px 0 10px', fontSize: 13, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Comentarios</h4>
         <form onSubmit={addComment} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <input
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             placeholder="Añade un comentario…"
             style={{ ...field, flex: 1 }}
+            disabled={commentSending}
           />
-          <button type="submit" style={primaryBtn}>Enviar</button>
+          <button type="submit" disabled={commentSending} style={{ ...primaryBtn, opacity: commentSending ? 0.6 : 1 }}>
+            {commentSending ? 'Enviando…' : 'Enviar'}
+          </button>
         </form>
 
         <div style={{ display: 'grid', gap: 10 }}>
@@ -180,6 +208,20 @@ export function TaskModal({
           ))}
         </div>
       </div>
+      </div>
+      {confirmDelete && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 110 }} onClick={() => setConfirmDelete(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 24, width: 360, maxWidth: '100%', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 20 }}>🗑</div>
+            <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700 }}>¿Eliminar tarea?</h3>
+            <p style={{ margin: '0 0 16px', color: 'var(--muted)', fontSize: 13 }}>“{task.title}” se eliminará para todos.</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button onClick={() => setConfirmDelete(false)} disabled={deleting} style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', padding: '9px 14px', borderRadius: 8, fontSize: 14, flex: 1, opacity: deleting ? 0.6 : 1 }}>Cancelar</button>
+              <button onClick={handleDelete} disabled={deleting} style={{ background: '#dc2626', color: '#fff', border: 'none', padding: '9px 14px', borderRadius: 8, fontSize: 14, fontWeight: 600, flex: 1, opacity: deleting ? 0.6 : 1 }}>{deleting ? 'Eliminando…' : 'Eliminar'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

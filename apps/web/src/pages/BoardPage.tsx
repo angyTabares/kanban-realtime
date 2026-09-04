@@ -7,11 +7,12 @@ import { useBoardState } from '../store/board';
 import { BoardPageColumns } from '../components/BoardPageColumns';
 import { BoardHeader } from '../components/BoardHeader';
 import { BoardFull } from '../lib/types';
+import { BoardSkeleton } from '../components/Skeleton';
 
 export function BoardPage() {
   const { boardId } = useParams<{ boardId: string }>();
   const me = useAuth((s) => s.user!);
-  const { board, loading, error, activeUserIds, optimisticMove, optimisticReorder } =
+  const { board, loading, error, activeUserIds, addTask, removeTask, addMember, optimisticMove, optimisticReorder } =
     useBoard(boardId!);
   const clearPresence = usePresence((s) => s.clear);
   const setBoardState = useBoardState((s) => s.setBoardState);
@@ -24,7 +25,7 @@ export function BoardPage() {
 
   useEffect(() => {
     if (!board) return;
-    const role = board.members.find((m) => m.userId === me.id)?.role ?? 'VIEWER';
+    const role = (board.members ?? []).find((m) => m.userId === me.id)?.role ?? 'VIEWER';
     setMyRole(role);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [board, me.id]);
@@ -37,7 +38,7 @@ export function BoardPage() {
   }, [clearPresence, clearBoard]);
 
   if (loading && !board) {
-    return <div style={{ padding: 32, color: 'var(--muted)' }}>Cargando board…</div>;
+    return <BoardSkeleton />;
   }
 
   if (error && !board) {
@@ -57,10 +58,12 @@ export function BoardPage() {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <BoardHeader board={board} canEdit={canEdit} activeUserIds={activeUserIds} />
+      <BoardHeader board={board} canEdit={canEdit} activeUserIds={activeUserIds} onMemberAdded={addMember} />
       <BoardPageColumns
         board={board as BoardFull}
         canEdit={canEdit}
+        addTask={addTask}
+        removeTask={removeTask}
         optimisticMove={optimisticMove}
         optimisticReorder={optimisticReorder}
       />
