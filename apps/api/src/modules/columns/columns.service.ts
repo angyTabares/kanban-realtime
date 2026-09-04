@@ -36,6 +36,7 @@ export class ColumnsService {
       }),
     );
 
+    (column as unknown as { tasks: unknown[] }).tasks = [];
     this.realtime.emitToBoard(boardId, BoardEvent.COLUMN_CREATED, column);
     return column;
   }

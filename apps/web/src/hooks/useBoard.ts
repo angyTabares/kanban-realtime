@@ -179,9 +179,10 @@ export function useBoard(boardId: string) {
     };
 
     const columnCreated = (col: ColumnDto) => {
+      const safe = { ...col, tasks: col.tasks ?? [] } as ColumnDto;
       setBoard((prev) =>
-        prev && !prev.columns.some((c) => c.id === col.id)
-          ? { ...prev, columns: [...prev.columns, col] }
+        prev && !prev.columns.some((c) => c.id === safe.id)
+          ? { ...prev, columns: [...prev.columns, safe] }
           : prev,
       );
     };
@@ -211,6 +212,8 @@ export function useBoard(boardId: string) {
     socket.on(BoardEvent.COLUMN_CREATED, columnCreated);
     socket.on(BoardEvent.COLUMN_UPDATED, columnUpdated);
     socket.on(BoardEvent.COLUMN_DELETED, columnDeleted);
+    socket.on(BoardEvent.MEMBER_ADDED, memberAdded);
+    socket.on(BoardEvent.MEMBER_REMOVED, memberRemoved);
 
     return () => {
       cancelled = true;
@@ -225,15 +228,58 @@ export function useBoard(boardId: string) {
       socket.off(BoardEvent.COLUMN_CREATED, columnCreated);
       socket.off(BoardEvent.COLUMN_UPDATED, columnUpdated);
       socket.off(BoardEvent.COLUMN_DELETED, columnDeleted);
+      socket.off(BoardEvent.MEMBER_ADDED, memberAdded);
+      socket.off(BoardEvent.MEMBER_REMOVED, memberRemoved);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boardId]);
 
-  return {
+    const memberAdded = (payload: unknown) => {
+      const m = (payload as { member?: unknown; id?: string })?.member ?? payload;
+      const member = m as { id?: string; userId?: string; role?: string; user?: { id?: string; name?: string } } | null;
+      if (!member?.id) return;
+      setBoard((prev) =>
+        prev && !prev.members.some((x) => x.id === member.id)
+          ? { ...prev, members: [...prev.members, member as never] }
+          : prev,
+      );
+    };
+    const memberRemoved = (payload: unknown) => {
+      const p = payload as { memberId?: string; id?: string } | null;
+      const memberId = p?.memberId ?? p?.id;
+      if (!memberId) return;
+      setBoard((prev) => (prev ? { ...prev, members: prev.members.filter((m) => m.id !== memberId) } : prev));
+    };
+
+    return {
     board,
     loading,
     error,
     activeUserIds,
+    addTask: (task: TaskDto) => {
+      setBoard((prev) => {
+        if (!prev || prev.columns.some((c) => c.tasks.some((x) => x.id === task.id))) return prev;
+        return {
+          ...prev,
+          columns: prev.columns.map((c) => (c.id === task.columnId ? { ...c, tasks: [...c.tasks, task] } : c)),
+        };
+      });
+    },
+    removeTask: (taskId: string) => {
+      setBoard((prev) =>
+        prev
+          ? {
+              ...prev,
+              columns: prev.columns.map((c) => ({ ...c, tasks: c.tasks.filter((t) => t.id !== taskId) })),
+            }
+          : prev,
+      );
+    },
+    addMember: (member: { id: string; userId: string; role: string; user: { id: string; name: string } }) => {
+      setBoard((prev) =>
+        prev && !prev.members.some((m) => m.id === member.id) ? { ...prev, members: [...prev.members, member as never] } : prev,
+      );
+    },
     /** Movimiento optimista: aplica el cambio en el board de inmediato.
      *  El evento del socket llega después y converge al estado real. */
     optimisticMove: (taskId: string, targetColumnId: string, position: number) => {
